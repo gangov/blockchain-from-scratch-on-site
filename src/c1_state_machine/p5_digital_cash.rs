@@ -94,7 +94,96 @@ impl StateMachine for DigitalCashSystem {
     type Transition = CashTransaction;
 
     fn next_state(starting_state: &Self::State, t: &Self::Transition) -> Self::State {
-        todo!("Exercise 1")
+        match t {
+            // we mint some bills to a specified user
+            CashTransaction::Mint { minter, amount } => {
+                let mut state = starting_state.clone();
+                state.add_bill(Bill {
+                    owner: *minter,
+                    amount: *amount,
+                    serial: state.next_serial(),
+                });
+                state
+            }
+            // transferring by making sure that we don't overflow
+            // I can probably use saturating_add/sub here
+            CashTransaction::Transfer { spends, receives } => {
+                if receives.iter().map(|b| b.amount).any(|b| b == u64::MAX) && receives.len() > 1 {
+                    dbg!("receives amount not okay");
+                    return starting_state.clone();
+                };
+
+                if receives.iter().any(|b| b.amount == 0) || spends.iter().any(|b| b.amount == 0) {
+                    dbg!("amounts not okay");
+                    return starting_state.clone();
+                }
+
+                let total_spends = spends.into_iter().map(|b| b.amount).sum::<u64>();
+                let total_receives = receives.into_iter().map(|b| b.amount).sum::<u64>();
+                if total_receives > total_spends {
+                    dbg!("total received larger than spent");
+                    return starting_state.clone();
+                }
+
+                let serials_spends = spends.into_iter().map(|b| b.serial).collect::<Vec<u64>>();
+                let serials_receives = receives.into_iter().map(|b| b.serial).collect::<Vec<u64>>();
+
+                if serials_spends.iter().any(|i| serials_receives.contains(i)) {
+                    dbg!("duplicate serials");
+                    return starting_state.clone();
+                }
+
+                let mut state = starting_state.clone();
+
+                for i in spends.into_iter() {
+                    if is_valid_amount(&state, i) {
+                        state.bills.remove(i);
+                    } else {
+                        return starting_state.clone();
+                    }
+                }
+
+                for i in receives.into_iter() {
+                    if is_valid_serial(&state, &i) {
+                        state.add_bill(i.clone());
+                    } else {
+                        return starting_state.clone();
+                    }
+                }
+
+                state
+            },
+        }
+    }
+}
+
+fn is_valid_serial(state: &State, bill: &Bill) -> bool {
+    dbg!(bill);
+    dbg!(state);
+    if state.next_serial == 1 && bill.serial == 0 {
+        return true;
+    }
+    dbg!(state.next_serial == bill.serial);
+    state.next_serial == bill.serial
+}
+
+fn is_valid_amount(state: &State, bill: &Bill) -> bool {
+    let found_bill = state
+        .bills
+        .iter()
+        .filter(|b| b.serial == bill.serial)
+        .collect::<Vec<_>>();
+    let found_bill = found_bill.first();
+
+    dbg!(bill);
+    dbg!(found_bill);
+    dbg!(state);
+
+    match found_bill {
+        Some(b) => {
+            return b.amount == bill.amount && bill.amount > 0;
+        }
+        None => return false,
     }
 }
 
