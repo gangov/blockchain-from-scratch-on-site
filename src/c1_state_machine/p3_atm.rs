@@ -58,7 +58,102 @@ impl StateMachine for Atm {
     type Transition = Action;
 
     fn next_state(starting_state: &Self::State, t: &Self::Transition) -> Self::State {
-        todo!("Exercise 4")
+        match &starting_state.expected_pin_hash {
+            // we can eitehr wait or authenticate at the ATM
+            Auth::Waiting => match t {
+                // swiping and entering pin
+                Action::SwipeCard(hash) => Self {
+                    cash_inside: starting_state.cash_inside,
+                    expected_pin_hash: Auth::Authenticating(*hash),
+                    keystroke_register: Vec::new(),
+                },
+                // we cannot do anything without swiping
+                Action::PressKey(_) => starting_state.clone(),
+            },
+            Auth::Authenticating(input_hash) => match t {
+                // we swipe again after authenticating so we do nothing
+                Action::SwipeCard(_) => starting_state.clone(),
+                // either inputing pass or entering numbers
+                Action::PressKey(key) => {
+                    let mut key_vec = starting_state.keystroke_register.clone();
+                    key_vec.push(key.clone());
+                    if key == &Key::Enter {
+                        key_vec.pop();
+                        let entered_pin_hash = crate::hash(&key_vec);
+                        if &entered_pin_hash == input_hash {
+                            // we entered the correct pin
+                            Self {
+                                cash_inside: starting_state.cash_inside,
+                                expected_pin_hash: Auth::Authenticated,
+                                keystroke_register: Vec::new(),
+                            }
+                        } else {
+                            // wrong pin, we restart
+                            Self {
+                                cash_inside: starting_state.cash_inside,
+                                expected_pin_hash: Auth::Waiting,
+                                keystroke_register: Vec::new(),
+                            }
+                        }
+                    } else {
+                        // adding the key to the register
+                        Self {
+                            cash_inside: starting_state.cash_inside,
+                            expected_pin_hash: Auth::Authenticating(*input_hash),
+                            keystroke_register: key_vec,
+                        }
+                    }
+                }
+            },
+            Auth::Authenticated => match t {
+                // makes no sense, so we just copy the state
+                Action::SwipeCard(_) => starting_state.clone(),
+                // now that we are authenticated we can withdrawn an amount
+                Action::PressKey(key) => {
+                    let mut key_vec = starting_state.keystroke_register.clone();
+                    key_vec.push(key.clone());
+                    if key == &Key::Enter {
+                        // sum of all the numbers
+                        let withdraw_amount = key_vec
+                            .iter()
+                            .take(key_vec.len() - 1)
+                            .map(key_to_value)
+                            .fold(0, |acc, val| acc * 10 + val);
+
+                        if withdraw_amount <= starting_state.cash_inside {
+                            Self {
+                                cash_inside: starting_state.cash_inside - withdraw_amount,
+                                expected_pin_hash: Auth::Waiting,
+                                keystroke_register: Vec::new(),
+                            }
+                        } else {
+                            Self {
+                                cash_inside: starting_state.cash_inside,
+                                expected_pin_hash: Auth::Waiting,
+                                keystroke_register: Vec::new(),
+                            }
+                        }
+                    } else {
+                        // we are still choosing how much money to withdraw
+                        Self {
+                            cash_inside: starting_state.cash_inside,
+                            expected_pin_hash: Auth::Authenticated,
+                            keystroke_register: key_vec,
+                        }
+                    }
+                }
+            },
+        }
+    }
+}
+
+fn key_to_value(key: &Key) -> u64 {
+    match key {
+        Key::One => 1,
+        Key::Two => 2,
+        Key::Three => 3,
+        Key::Four => 4,
+        _ => 0,
     }
 }
 
