@@ -45,7 +45,89 @@ impl StateMachine for AccountedCurrency {
     type Transition = AccountingTransaction;
 
     fn next_state(starting_state: &Balances, t: &AccountingTransaction) -> Balances {
-        todo!("Exercise 1")
+        match t {
+            AccountingTransaction::Mint { minter, amount } => {
+                let mut st8: Balances = starting_state.clone();
+                match st8.contains_key(minter) {
+                    // if we have an account with that username we update
+                    true => {
+                        let old_val = st8.get(minter).unwrap_or(&0);
+                        st8.insert(minter.clone(), old_val.saturating_add(amount.clone()));
+                        return st8;
+                    }
+                    // otherwise we create
+                    false => {
+                        if amount.clone() == 0 {
+                            return st8;
+                        }
+                        st8.insert(minter.clone(), amount.clone());
+                        st8
+                    }
+                }
+            }
+            AccountingTransaction::Burn { burner, amount } => match starting_state.get(burner) {
+                Some(current_balance) => {
+                    // if there is such an account with no balance we remove it
+                    if current_balance.saturating_sub(amount.clone()).le(&0) {
+                        let mut new_state = starting_state.clone();
+                        new_state.remove(burner);
+                        new_state
+                    } else {
+                        // else we reduce the balance
+                        let mut new_state = starting_state.clone();
+                        new_state.insert(
+                            burner.clone(),
+                            current_balance.saturating_sub(amount.clone()),
+                        );
+                        new_state
+                    }
+                }
+                // meh
+                None => starting_state.clone(),
+            },
+            AccountingTransaction::Transfer {
+                sender,
+                receiver,
+                amount,
+            } => {
+                // quick verification
+                if !starting_state.contains_key(&sender) {
+                    return starting_state.clone();
+                }
+
+                let sender_balance = starting_state.get(sender).unwrap_or(&0);
+                // we can optimize this
+                if sender_balance > amount {
+                    let mut st8 = starting_state.clone();
+                    st8.insert(
+                        sender.clone(),
+                        sender_balance.saturating_sub(amount.clone()),
+                    );
+                    match st8.contains_key(&receiver) {
+                        true => st8.insert(
+                            receiver.clone(),
+                            st8.get(receiver)
+                                .unwrap_or(&0)
+                                .saturating_add(amount.clone()),
+                        ),
+                        false => st8.insert(*receiver, amount.clone()),
+                    };
+                    st8
+                } else if sender_balance == amount {
+                    let mut st8 = starting_state.clone();
+                    st8.remove(sender).unwrap();
+                    st8.insert(
+                        receiver.clone(),
+                        st8.get(receiver)
+                            .unwrap_or(&0)
+                            .saturating_add(amount.clone()),
+                    );
+                    st8
+                } else {
+                    starting_state.clone()
+                }
+            }
+        }
     }
 }
 
