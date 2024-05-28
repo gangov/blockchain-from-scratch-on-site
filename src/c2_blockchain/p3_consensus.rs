@@ -37,12 +37,24 @@ pub struct Header {
 impl Header {
     /// Returns a new valid genesis header.
     fn genesis() -> Self {
-        todo!("Exercise 1")
+        Self {
+            parent: 0,
+            height: 0,
+            extrinsic: 0,
+            state: 0,
+            consensus_digest: 0,
+        }
     }
 
     /// Create and return a valid child header.
     fn child(&self, extrinsic: u64) -> Self {
-        todo!("Exercise 2")
+        Self {
+            parent: hash(&self),
+            height: self.height + 1,
+            extrinsic,
+            state: self.state + extrinsic,
+            consensus_digest: 0,
+        }
     }
 
     /// Verify that all the given headers form a valid chain from this header to the tip.
@@ -50,7 +62,27 @@ impl Header {
     /// In addition to all the rules we had before, we now need to check that the block hash
     /// is below a specific threshold.
     fn verify_sub_chain(&self, chain: &[Header]) -> bool {
-        todo!("Exercise 3")
+        if chain.is_empty() {
+            return true;
+        }
+
+        if chain[0].parent != hash(self) {
+            return false;
+        }
+
+        if chain[0].height != self.height + 1 {
+            return false;
+        }
+
+        if chain[0].state != self.state + chain[0].extrinsic {
+            return false;
+        }
+
+        if hash(&chain[0]) >= THRESHOLD {
+            return false;
+        }
+
+        self.verify_sub_chain(&chain[1..])
     }
 
     // After the blockchain ran for a while, a political rift formed in the community.
@@ -62,13 +94,13 @@ impl Header {
     /// verify that the given headers form a valid chain.
     /// In this case "valid" means that the STATE MUST BE EVEN.
     fn verify_sub_chain_even(&self, chain: &[Header]) -> bool {
-        todo!("Exercise 4")
+        chain.iter().any(|header| header.state % 2 != 0)
     }
 
     /// verify that the given headers form a valid chain.
     /// In this case "valid" means that the STATE MUST BE ODD.
     fn verify_sub_chain_odd(&self, chain: &[Header]) -> bool {
-        todo!("Exercise 5")
+        chain.iter().any(|header| header.state % 2 == 0)
     }
 }
 
